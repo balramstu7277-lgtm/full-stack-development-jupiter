@@ -6,6 +6,7 @@ const c = require('../controllers/mainController');
 
 // Students
 router.get('/students', protect, adminOnly, c.getStudents);
+router.get('/students/pdf', protect, adminOnly, c.downloadStudentsPDF);
 router.put('/students/:id', protect, adminOnly, c.updateStudent);
 router.delete('/students/:id', protect, adminOnly, c.deleteStudent);
 

@@ -111,19 +111,25 @@ function StudentsTab() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState('');
   const [filterClass, setFilterClass] = useState('');
+  const [filterBatch, setFilterBatch] = useState('');
   const [editStudent, setEditStudent] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [viewStudent, setViewStudent] = useState(null);
 
   const load = () => {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (filterClass) params.append('class', filterClass);
+    if (filterBatch) params.append('batch', filterBatch);
     API.get(`/students?${params}`).then(r => setStudents(r.data.students || [])).catch(() => {});
   };
 
-  useEffect(() => { load(); }, [search, filterClass]);
+  useEffect(() => { load(); }, [search, filterClass, filterBatch]);
 
-  const openEdit = (s) => { setEditStudent(s); setEditForm({ name: s.name, phone: s.phone || '', class: s.class || '', batch: s.batch || '', isActive: s.isActive }); };
+  const openEdit = (s) => {
+    setEditStudent(s);
+    setEditForm({ name: s.name, phone: s.phone || '', class: s.class || '', batch: s.batch || '', isActive: s.isActive, fatherName: s.fatherName || '', motherName: s.motherName || '' });
+  };
 
   const saveEdit = async () => {
     try {
@@ -141,28 +147,61 @@ function StudentsTab() {
     load();
   };
 
+  const downloadPDF = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filterClass) params.append('class', filterClass);
+      if (filterBatch) params.append('batch', filterBatch);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/students/pdf?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `students-${filterClass || 'all'}-${Date.now()}.html`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Student list downloaded!');
+    } catch { toast.error('Download failed'); }
+  };
+
+  const batches = filterClass ? BATCHES[filterClass] : [];
+
   return (
     <div>
-      <h2 className="font-display text-2xl font-bold text-gray-800 mb-5">Students ({students.length})</h2>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="font-display text-2xl font-bold text-gray-800">Students ({students.length})</h2>
+        <button onClick={downloadPDF} className="btn-primary btn-sm flex items-center gap-2">
+          <FaFileAlt /> Download PDF
+        </button>
+      </div>
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="relative flex-1 min-w-48">
           <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students..." className="input-field pl-9 py-2 text-sm" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email..." className="input-field pl-9 py-2 text-sm" />
         </div>
-        <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="input-field py-2 text-sm w-auto">
+        <select value={filterClass} onChange={e => { setFilterClass(e.target.value); setFilterBatch(''); }} className="input-field py-2 text-sm w-auto">
           <option value="">All Classes</option>
           <option>Class 11</option>
           <option>Class 12</option>
         </select>
+        <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)} className="input-field py-2 text-sm w-auto" disabled={!filterClass}>
+          <option value="">All Batches</option>
+          {batches.map(b => <option key={b}>{b}</option>)}
+        </select>
       </div>
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead className="bg-gray-50">
             <tr>
+              <th className="table-th">Roll No.</th>
               <th className="table-th">Name</th>
               <th className="table-th">Class</th>
               <th className="table-th">Batch</th>
               <th className="table-th">Phone</th>
+              <th className="table-th">Father Name</th>
               <th className="table-th">Status</th>
               <th className="table-th">Actions</th>
             </tr>
@@ -170,31 +209,75 @@ function StudentsTab() {
           <tbody className="divide-y divide-gray-50">
             {students.map(s => (
               <tr key={s._id} className="hover:bg-gray-50">
+                <td className="table-td font-mono text-xs text-primary-700 font-bold">{s.rollNumber || '—'}</td>
                 <td className="table-td font-medium">{s.name}</td>
                 <td className="table-td">{s.class || '—'}</td>
                 <td className="table-td text-xs text-gray-500">{s.batch || '—'}</td>
                 <td className="table-td">{s.phone || '—'}</td>
+                <td className="table-td">{s.fatherName || '—'}</td>
                 <td className="table-td">
                   <span className={`badge ${s.isActive ? 'badge-green' : 'badge-red'}`}>{s.isActive ? 'Active' : 'Inactive'}</span>
                 </td>
                 <td className="table-td">
                   <div className="flex gap-2">
+                    <button onClick={() => setViewStudent(s)} className="text-green-500 hover:text-green-700 p-1" title="View Profile"><FaEye /></button>
                     <button onClick={() => openEdit(s)} className="text-blue-500 hover:text-blue-700 p-1"><FaEdit /></button>
                     <button onClick={() => deleteStudent(s._id)} className="text-red-400 hover:text-red-600 p-1"><FaTrash /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {!students.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400">No students found.</td></tr>}
+            {!students.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No students found.</td></tr>}
           </tbody>
         </table>
       </div>
+
+      {/* View Profile Modal */}
+      <AnimatePresence>
+        {viewStudent && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-display font-bold text-lg text-gray-800">Student Profile</h3>
+                <button onClick={() => setViewStudent(null)} className="text-gray-400 hover:text-gray-600"><FaTimes /></button>
+              </div>
+              <div className="flex items-center gap-4 mb-5">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
+                  <span className="text-primary-700 font-bold text-2xl">{viewStudent.name[0]}</span>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800 text-lg">{viewStudent.name}</p>
+                  <p className="text-primary-600 font-mono text-sm font-bold">{viewStudent.rollNumber || 'No Roll No.'}</p>
+                  <span className={`badge ${viewStudent.isActive ? 'badge-green' : 'badge-red'}`}>{viewStudent.isActive ? 'Active' : 'Inactive'}</span>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                {[
+                  ['Email', viewStudent.email],
+                  ['Phone', viewStudent.phone || '—'],
+                  ['Class', viewStudent.class || '—'],
+                  ['Batch', viewStudent.batch || '—'],
+                  ['Father Name', viewStudent.fatherName || '—'],
+                  ['Mother Name', viewStudent.motherName || '—'],
+                  ['Joined', new Date(viewStudent.joinedDate || viewStudent.createdAt).toLocaleDateString('en-IN')],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between py-2 border-b border-gray-50">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="font-medium text-gray-800">{value}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { setViewStudent(null); openEdit(viewStudent); }} className="btn-primary w-full mt-4 btn-sm">Edit Student</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Edit Modal */}
       <AnimatePresence>
         {editStudent && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-display font-bold text-lg text-gray-800">Edit Student</h3>
                 <button onClick={() => setEditStudent(null)} className="text-gray-400 hover:text-gray-600"><FaTimes /></button>
@@ -202,6 +285,8 @@ function StudentsTab() {
               <div className="space-y-3">
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Name</label><input value={editForm.name || ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="input-field text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Phone</label><input value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="input-field text-sm" /></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Father Name</label><input value={editForm.fatherName || ''} onChange={e => setEditForm(f => ({ ...f, fatherName: e.target.value }))} className="input-field text-sm" /></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Mother Name</label><input value={editForm.motherName || ''} onChange={e => setEditForm(f => ({ ...f, motherName: e.target.value }))} className="input-field text-sm" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Class</label>

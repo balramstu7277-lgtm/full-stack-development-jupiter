@@ -3,6 +3,52 @@ const { Test, TestResult } = require('../models/Test');
 const { Fee, Attendance, Notice, StudyMaterial, Topper, Gallery, Teacher, PaymentOrder, Course } = require('../models/Others');
 const { cloudinary } = require('../config/cloudinary');
 
+// ========== STUDENT PDF DOWNLOAD ==========
+exports.downloadStudentsPDF = async (req, res, next) => {
+  try {
+    const { batch, class: cls } = req.query;
+    const query = { role: 'student' };
+    if (cls) query.class = cls;
+    if (batch) query.batch = batch;
+    const students = await User.find(query).sort({ rollNumber: 1 });
+
+    const rows = students.map((s, i) => `
+      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.rollNumber || '—'}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.name}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.class || '—'}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.batch || '—'}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.phone || '—'}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.fatherName || '—'}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.email}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0">${s.isActive ? 'Active' : 'Inactive'}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Student List</title>
+    <style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}
+    h1{color:#1e3a8a;margin-bottom:4px}p{color:#64748b;margin:0 0 16px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#1e3a8a;color:white;padding:10px 12px;text-align:left;border:1px solid #1e40af}
+    </style></head><body>
+    <h1>Jupiter Classes — Student List</h1>
+    <p>${cls ? cls : 'All Classes'} ${batch ? '| ' + batch : ''} | Total: ${students.length} students</p>
+    <table>
+      <thead><tr>
+        <th>Roll No.</th><th>Name</th><th>Class</th><th>Batch</th>
+        <th>Phone</th><th>Father Name</th><th>Email</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top:20px;color:#94a3b8;font-size:11px">Generated on ${new Date().toLocaleDateString('en-IN')}</p>
+    </body></html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Disposition', `attachment; filename="students-${cls || 'all'}-${Date.now()}.html"`);
+    res.send(html);
+  } catch (error) { next(error); }
+};
+
 // ========== STUDENTS ==========
 exports.getStudents = async (req, res, next) => {
   try {
@@ -18,10 +64,10 @@ exports.getStudents = async (req, res, next) => {
 
 exports.updateStudent = async (req, res, next) => {
   try {
-    const { name, phone, address, class: cls, batch, isActive, feesPaid, feesTotal } = req.body;
+    const { name, phone, address, class: cls, batch, isActive, feesPaid, feesTotal, fatherName, motherName } = req.body;
     const student = await User.findByIdAndUpdate(
       req.params.id,
-      { name, phone, address, class: cls, batch: batch || '', isActive, feesPaid, feesTotal },
+      { name, phone, address, class: cls, batch: batch || '', isActive, feesPaid, feesTotal, fatherName: fatherName || '', motherName: motherName || '' },
       { new: true }
     );
     res.json({ success: true, student });
